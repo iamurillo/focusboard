@@ -4,3 +4,4 @@ dist/
 .env.local
 .DS_Store
 server/database.sqlite
+server/uploads/

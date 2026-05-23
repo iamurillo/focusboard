@@ -1,16 +1,19 @@
-# React + Vite
+# FocusBoard (Sistema Tipo Jira Personal)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Este es un sistema de gestión de tareas Fullstack (React + Node.js + SQLite) creado con la ayuda de IA.
 
-Currently, two official plugins are available:
+## Características Principales
+1. **Múltiples Vistas:** Tablero Kanban (Drag & Drop), Lista, Calendario y Gráficas de Reportes.
+2. **Personalización:** Soporte nativo para modo oscuro y fondos personalizados usando la API de Unsplash. Cambia el nombre de tu entorno desde los Ajustes.
+3. **Inteligencia Artificial:** Usa ChatGPT (OpenAI API Key) para que la herramienta descomponga tareas grandes en subtareas por ti.
+4. **Markdown y Archivos:** Crea descripciones usando Markdown para código y texto enriquecido. Sube archivos locales (`multer`) a tus tarjetas.
+5. **Productividad:** Temporizador (Time Tracking) integrado en cada tarjeta para medir tu tiempo de trabajo y Registro de Actividad para ver un historial de tus movimientos.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Cómo empezar
+1. Asegúrate de tener Node.js instalado.
+2. Clona este repositorio y entra en la carpeta.
+3. Ejecuta `npm install`
+4. Ejecuta `npm run dev` para iniciar el Backend y el Frontend al mismo tiempo.
+5. Ve a `http://localhost:5173` y crea una cuenta.
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+*Nota: La base de datos es local (`server/database.sqlite`) y las contraseñas están encriptadas con `bcryptjs`.*

@@ -15,10 +15,20 @@ const db = new sqlite3.Database(dbPath, (err) => {
 });
 
 db.serialize(() => {
-  // We'll store tasks with tags and subtasks as JSON strings for simplicity 
-  // since SQLite supports JSON and it makes React state mapping 1:1 easier.
+  // Users table
+  db.run(`CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT UNIQUE,
+    password TEXT,
+    apiKey TEXT UNIQUE,
+    openaiKey TEXT,
+    unsplashKey TEXT
+  )`);
+
+  // Tasks table
   db.run(`CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
+    userId TEXT,
     title TEXT,
     description TEXT,
     priority TEXT,
@@ -26,14 +36,27 @@ db.serialize(() => {
     columnId TEXT,
     position INTEGER,
     tags TEXT,
-    subtasks TEXT
+    subtasks TEXT,
+    comments TEXT,
+    attachments TEXT,
+    timeSpent INTEGER DEFAULT 0
   )`);
 
-  // Default columns are hardcoded in the frontend, but let's store them just in case
+  // Board state per user
   db.run(`CREATE TABLE IF NOT EXISTS board_state (
-    id TEXT PRIMARY KEY,
+    userId TEXT PRIMARY KEY,
     columnsJSON TEXT,
-    columnOrderJSON TEXT
+    columnOrderJSON TEXT,
+    bgImageUrl TEXT,
+    appName TEXT
+  )`);
+
+  // Activity Logs
+  db.run(`CREATE TABLE IF NOT EXISTS activity_logs (
+    id TEXT PRIMARY KEY,
+    userId TEXT,
+    action TEXT,
+    timestamp TEXT
   )`);
 });
 
