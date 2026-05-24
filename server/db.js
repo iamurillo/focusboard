@@ -23,13 +23,17 @@ db.serialize(() => {
     apiKey TEXT UNIQUE,
     openaiKey TEXT,
     unsplashKey TEXT,
-    openaiModel TEXT DEFAULT 'gemini-1.5-flash'
+    openaiModel TEXT DEFAULT 'gemini-1.5-flash',
+    aiProvider TEXT DEFAULT 'gemini',
+    ollamaUrl TEXT DEFAULT 'http://localhost:11434',
+    ollamaModel TEXT DEFAULT 'llama3'
   )`);
 
   // Add column if it doesn't exist (migration)
-  db.run(`ALTER TABLE users ADD COLUMN openaiModel TEXT DEFAULT 'gemini-1.5-flash'`, (err) => {
-    // We ignore the error if the column already exists
-  });
+  db.run(`ALTER TABLE users ADD COLUMN openaiModel TEXT DEFAULT 'gemini-1.5-flash'`, (err) => {});
+  db.run(`ALTER TABLE users ADD COLUMN aiProvider TEXT DEFAULT 'gemini'`, (err) => {});
+  db.run(`ALTER TABLE users ADD COLUMN ollamaUrl TEXT DEFAULT 'http://localhost:11434'`, (err) => {});
+  db.run(`ALTER TABLE users ADD COLUMN ollamaModel TEXT DEFAULT 'llama3'`, (err) => {});
 
   // Tasks table
   db.run(`CREATE TABLE IF NOT EXISTS tasks (

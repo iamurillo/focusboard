@@ -7,6 +7,9 @@ export default function Settings({ onBgChange }) {
   const [openaiKey, setOpenaiKey] = useState('');
   const [unsplashKey, setUnsplashKey] = useState('');
   const [openaiModel, setOpenaiModel] = useState('gemini-1.5-flash');
+  const [aiProvider, setAiProvider] = useState('gemini');
+  const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
+  const [ollamaModel, setOllamaModel] = useState('llama3');
   const [bgQuery, setBgQuery] = useState('');
   const [appName, setAppName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -21,6 +24,9 @@ export default function Settings({ onBgChange }) {
         if (data.hasOpenaiKey) setOpenaiKey('********');
         if (data.hasUnsplashKey) setUnsplashKey('********');
         if (data.openaiModel) setOpenaiModel(data.openaiModel);
+        if (data.aiProvider) setAiProvider(data.aiProvider);
+        if (data.ollamaUrl) setOllamaUrl(data.ollamaUrl);
+        if (data.ollamaModel) setOllamaModel(data.ollamaModel);
       });
     
     fetch(`${API_URL}/board`, { headers: { 'Authorization': `Bearer ${token}` } })
@@ -34,7 +40,7 @@ export default function Settings({ onBgChange }) {
     const token = localStorage.getItem('focusboard_token');
     try {
       // Si la llave es '********', significa que no ha cambiado y no debemos enviarla
-      const payload = { openaiModel };
+      const payload = { openaiModel, aiProvider, ollamaUrl, ollamaModel };
       if (openaiKey && openaiKey !== '********') payload.openaiKey = openaiKey;
       if (unsplashKey && unsplashKey !== '********') payload.unsplashKey = unsplashKey;
 
@@ -112,30 +118,73 @@ export default function Settings({ onBgChange }) {
         <h3>Integraciones e Inteligencia Artificial</h3>
         
         <div className="form-group" style={{ marginTop: '1rem' }}>
-          <label className="form-label">Google Gemini API Key</label>
-          <input 
-            type="password" 
-            className="form-input" 
-            placeholder="AIzaSy..." 
-            value={openaiKey}
-            onChange={e => setOpenaiKey(e.target.value)}
-          />
-          <small className="text-muted">Necesaria para usar la varita mágica y generar subtareas con Google Gemini.</small>
-        </div>
-
-        <div className="form-group" style={{ marginTop: '1rem' }}>
-          <label className="form-label">Modelo de Inteligencia Artificial</label>
+          <label className="form-label">Proveedor de Inteligencia Artificial</label>
           <select 
             className="form-input" 
-            value={openaiModel} 
-            onChange={e => setOpenaiModel(e.target.value)}
+            value={aiProvider} 
+            onChange={e => setAiProvider(e.target.value)}
           >
-            <option value="gemini-1.5-flash">Gemini 1.5 Flash (Rápido y económico)</option>
-            <option value="gemini-2.0-flash">Gemini 2.0 Flash (Más reciente y balanceado)</option>
-            <option value="gemini-1.5-pro">Gemini 1.5 Pro (Más inteligente y avanzado)</option>
+            <option value="gemini">Google Gemini (En la nube)</option>
+            <option value="ollama">Ollama (Local / Privado)</option>
           </select>
-          <small className="text-muted">Elige el "cerebro" que FocusBoard usará para generar tareas y chatear.</small>
         </div>
+
+        {aiProvider === 'gemini' && (
+          <>
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <label className="form-label">Google Gemini API Key</label>
+              <input 
+                type="password" 
+                className="form-input" 
+                placeholder="AIzaSy..." 
+                value={openaiKey}
+                onChange={e => setOpenaiKey(e.target.value)}
+              />
+              <small className="text-muted">Necesaria para usar la varita mágica y generar subtareas.</small>
+            </div>
+
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <label className="form-label">Modelo de Gemini</label>
+              <select 
+                className="form-input" 
+                value={openaiModel} 
+                onChange={e => setOpenaiModel(e.target.value)}
+              >
+                <option value="gemini-1.5-flash">Gemini 1.5 Flash (Rápido y económico)</option>
+                <option value="gemini-2.0-flash">Gemini 2.0 Flash (Más reciente y balanceado)</option>
+                <option value="gemini-1.5-pro">Gemini 1.5 Pro (Más inteligente y avanzado)</option>
+              </select>
+            </div>
+          </>
+        )}
+
+        {aiProvider === 'ollama' && (
+          <>
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <label className="form-label">URL del servidor Ollama</label>
+              <input 
+                type="text" 
+                className="form-input" 
+                placeholder="http://localhost:11434" 
+                value={ollamaUrl}
+                onChange={e => setOllamaUrl(e.target.value)}
+              />
+            </div>
+            
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <label className="form-label">Nombre del Modelo Ollama (Ej. llama3, phi3)</label>
+              <input 
+                type="text" 
+                className="form-input" 
+                placeholder="llama3" 
+                value={ollamaModel}
+                onChange={e => setOllamaModel(e.target.value)}
+              />
+            </div>
+          </>
+        )}
+
+        <hr style={{ margin: '2rem 0', border: 'none', borderTop: '1px solid #ddd' }} />
 
         <div className="form-group" style={{ marginTop: '1rem' }}>
           <label className="form-label">Unsplash API Key (Access Key)</label>
