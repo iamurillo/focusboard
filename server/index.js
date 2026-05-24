@@ -411,9 +411,43 @@ app.post('/api/external/autocomplete', authenticate, async (req, res) => {
     // Clean up potential markdown formatting from AI response
     content = content.replace(/```json/g, '').replace(/```/g, '').trim();
     
-    const subtaskArray = JSON.parse(content);
+    let subtaskArray = [];
+    try {
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed)) {
+        subtaskArray = parsed;
+      } else if (parsed.subtasks && Array.isArray(parsed.subtasks)) {
+        subtaskArray = parsed.subtasks;
+      } else if (parsed.tasks && Array.isArray(parsed.tasks)) {
+        subtaskArray = parsed.tasks;
+      } else {
+        subtaskArray = Object.values(parsed).filter(v => typeof v === 'string');
+      }
+    } catch(e) {
+      // Intentar extraer un arreglo usando Regex
+      const match = content.match(/\[[\s\S]*\]/);
+      if (match) {
+        try {
+          subtaskArray = JSON.parse(match[0]);
+        } catch(err2) {
+          subtaskArray = ["Error: La IA no devolvió un formato válido."];
+        }
+      } else {
+        // Fallback: separar por lineas
+        subtaskArray = content.split('\n')
+          .filter(l => l.trim().length > 0)
+          .map(l => l.replace(/^- /, '').replace(/^\d+\.\s/, '').trim());
+      }
+    }
     
-    const subtasks = subtaskArray.map(st => ({ id: uuidv4(), title: st, completed: false }));
+    if (!Array.isArray(subtaskArray) || subtaskArray.length === 0) {
+      subtaskArray = ["Revisar resultados manualmente"];
+    }
+
+    const subtasks = subtaskArray.map(st => {
+      const titleStr = typeof st === 'string' ? st : (st.title || st.name || JSON.stringify(st));
+      return { id: uuidv4(), title: titleStr, completed: false };
+    });
     res.json({ subtasks });
   } catch (err) {
     res.status(500).json({ error: err.message });
