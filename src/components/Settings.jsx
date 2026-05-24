@@ -17,8 +17,8 @@ export default function Settings({ onBgChange }) {
       .then(res => res.json())
       .then(data => {
         setApiKey(data.apiKey || '');
-        setOpenaiKey(data.openaiKey || '');
-        setUnsplashKey(data.unsplashKey || '');
+        if (data.hasOpenaiKey) setOpenaiKey('********');
+        if (data.hasUnsplashKey) setUnsplashKey('********');
       });
     
     fetch(`${API_URL}/board`, { headers: { 'Authorization': `Bearer ${token}` } })
@@ -31,10 +31,15 @@ export default function Settings({ onBgChange }) {
     setMsg('');
     const token = localStorage.getItem('focusboard_token');
     try {
+      // Si la llave es '********', significa que no ha cambiado y no debemos enviarla
+      const payload = {};
+      if (openaiKey && openaiKey !== '********') payload.openaiKey = openaiKey;
+      if (unsplashKey && unsplashKey !== '********') payload.unsplashKey = unsplashKey;
+
       await fetch(`${API_URL}/me`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ openaiKey, unsplashKey })
+        body: JSON.stringify(payload)
       });
       setMsg('Ajustes guardados correctamente.');
     } catch (err) {

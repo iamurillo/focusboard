@@ -10,6 +10,12 @@ import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import db from './db.js';
+import dotenv from 'dotenv';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import crypto from 'crypto';
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,19 +29,72 @@ const io = new Server(httpServer, {
   }
 });
 
+app.use(helmet({
+  crossOriginResourcePolicy: false, // Permitir cargar imágenes locales temporalmente si hace falta
+}));
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-const PORT = 3001;
-const JWT_SECRET = 'super-secret-key-for-focusboard';
+const PORT = process.env.PORT || 3001;
+const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-for-focusboard';
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+const IV_LENGTH = 16;
+
+function encrypt(text) {
+  if (!text) return text;
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY, 'hex'), iv);
+  let encrypted = cipher.update(text);
+  encrypted = Buffer.concat([encrypted, cipher.final()]);
+  return iv.toString('hex') + ':' + encrypted.toString('hex');
+}
+
+function decrypt(text) {
+  if (!text) return text;
+  const textParts = text.split(':');
+  if (textParts.length !== 2) return text;
+  const iv = Buffer.from(textParts.shift(), 'hex');
+  const encryptedText = Buffer.from(textParts.join(':'), 'hex');
+  const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY, 'hex'), iv);
+  let decrypted = decipher.update(encryptedText);
+  decrypted = Buffer.concat([decrypted, decipher.final()]);
+  return decrypted.toString();
+}
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 20, // 20 peticiones por IP
+  message: { error: 'Demasiados intentos. Por favor intenta de nuevo en 15 minutos.' }
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minuto
+  max: 30, // 30 peticiones por IP por minuto
+  message: { error: 'Límite de peticiones excedido.' }
+});
+
+app.use('/api/register', authLimiter);
+app.use('/api/login', authLimiter);
+app.use('/api/external/', apiLimiter);
 
 // Multer config
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, path.join(__dirname, 'uploads')),
-  filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, '_'))
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, Date.now() + '-' + crypto.randomBytes(8).toString('hex') + ext);
+  }
 });
-const upload = multer({ storage });
+const fileFilter = (req, file, cb) => {
+  const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
+  if (allowedMimeTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Tipo de archivo no permitido. Solo imágenes y PDFs.'));
+  }
+};
+const upload = multer({ storage, fileFilter, limits: { fileSize: 5 * 1024 * 1024 } });
 
 const dbGet = (query, params = []) => new Promise((resolve, reject) => db.get(query, params, (err, row) => err ? reject(err) : resolve(row)));
 const dbAll = (query, params = []) => new Promise((resolve, reject) => db.all(query, params, (err, rows) => err ? reject(err) : resolve(rows)));
@@ -113,7 +172,16 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/me', authenticate, async (req, res) => {
   try {
     const user = await dbGet(`SELECT username, apiKey, openaiKey, unsplashKey FROM users WHERE id = ?`, [req.userId]);
-    res.json(user || {});
+    if (user) {
+      res.json({
+        username: user.username,
+        apiKey: user.apiKey,
+        hasOpenaiKey: !!user.openaiKey,
+        hasUnsplashKey: !!user.unsplashKey
+      });
+    } else {
+      res.json({});
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -122,7 +190,13 @@ app.get('/api/me', authenticate, async (req, res) => {
 app.post('/api/me', authenticate, async (req, res) => {
   const { openaiKey, unsplashKey } = req.body;
   try {
-    await dbRun(`UPDATE users SET openaiKey = ?, unsplashKey = ? WHERE id = ?`, [openaiKey, unsplashKey, req.userId]);
+    const user = await dbGet(`SELECT openaiKey, unsplashKey FROM users WHERE id = ?`, [req.userId]);
+    
+    // Solo actualizar si nos enviaron una nueva llave
+    const encryptedOpenai = openaiKey !== undefined ? encrypt(openaiKey) : user.openaiKey;
+    const encryptedUnsplash = unsplashKey !== undefined ? encrypt(unsplashKey) : user.unsplashKey;
+    
+    await dbRun(`UPDATE users SET openaiKey = ?, unsplashKey = ? WHERE id = ?`, [encryptedOpenai, encryptedUnsplash, req.userId]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -243,7 +317,8 @@ app.post('/api/external/autocomplete', authenticate, async (req, res) => {
       ]});
     }
 
-    const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${user.openaiKey}`, {
+    const decryptedKey = decrypt(user.openaiKey);
+    const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${decryptedKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -279,8 +354,9 @@ app.get('/api/external/unsplash', authenticate, async (req, res) => {
     const user = await dbGet(`SELECT unsplashKey FROM users WHERE id = ?`, [req.userId]);
     if (!user || !user.unsplashKey) return res.status(400).json({ error: 'No Unsplash API Key config.' });
 
+    const decryptedKey = decrypt(user.unsplashKey);
     const unsplashRes = await fetch(`https://api.unsplash.com/search/photos?query=${query}&orientation=landscape&per_page=1`, {
-      headers: { 'Authorization': `Client-ID ${user.unsplashKey}` }
+      headers: { 'Authorization': `Client-ID ${decryptedKey}` }
     });
     
     const data = await unsplashRes.json();
@@ -323,7 +399,8 @@ El usuario te dice: "${message}"
 Responde de forma concisa y amigable basándote en la información de sus tareas.
 `;
 
-    const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${user.openaiKey}`, {
+    const decryptedKey = decrypt(user.openaiKey);
+    const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${decryptedKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
