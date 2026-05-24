@@ -105,15 +105,15 @@ export default function Settings({ onBgChange }) {
         <h3>Integraciones e Inteligencia Artificial</h3>
         
         <div className="form-group" style={{ marginTop: '1rem' }}>
-          <label className="form-label">OpenAI API Key (ChatGPT)</label>
+          <label className="form-label">Google Gemini API Key</label>
           <input 
             type="password" 
             className="form-input" 
-            placeholder="sk-..." 
+            placeholder="AIzaSy..." 
             value={openaiKey}
             onChange={e => setOpenaiKey(e.target.value)}
           />
-          <small className="text-muted">Necesaria para usar la varita mágica y generar subtareas inteligentemente.</small>
+          <small className="text-muted">Necesaria para usar la varita mágica y generar subtareas con Google Gemini.</small>
         </div>
 
         <div className="form-group" style={{ marginTop: '1rem' }}>

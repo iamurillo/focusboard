@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import { DragDropContext, Droppable } from '@hello-pangea/dnd';
 import { v4 as uuidv4 } from 'uuid';
 import { Layout, LayoutDashboard, Plus, Search, LogOut, BarChart2, List, Settings as SettingsIcon } from 'lucide-react';
+import { io } from 'socket.io-client';
 import TaskCard from './components/TaskCard';
 import TaskModal from './components/TaskModal';
 import Login from './components/Login';
@@ -11,8 +12,10 @@ import ReportsView from './components/ReportsView';
 import Settings from './components/Settings';
 import CalendarView from './components/CalendarView';
 import ActivityLog from './components/ActivityLog';
+import Chatbot from './components/Chatbot';
 
 const API_URL = 'http://localhost:3001/api';
+const socket = io('http://localhost:3001');
 
 // A protected route wrapper
 const ProtectedRoute = ({ children, isAuthenticated }) => {
@@ -68,8 +71,23 @@ function MainLayout({ token, onLogout }) {
     'Authorization': `Bearer ${token}`
   };
 
+  const location = useLocation();
+
   useEffect(() => {
     fetchBoard();
+
+    // Setup WebSocket listener
+    const handleBoardUpdate = (updatedUserId) => {
+      // Decode JWT token to check user ID without making request if possible, 
+      // but simpler: just refetch the board since it's authenticated to our token.
+      fetchBoard();
+    };
+
+    socket.on('boardUpdate', handleBoardUpdate);
+
+    return () => {
+      socket.off('boardUpdate', handleBoardUpdate);
+    };
   }, [token]);
 
   const fetchBoard = async () => {
@@ -341,6 +359,8 @@ function MainLayout({ token, onLogout }) {
         onAutosuggest={handleAutosuggest}
         token={token}
       />
+      
+      <Chatbot token={token} />
     </div>
   );
 }

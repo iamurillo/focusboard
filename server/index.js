@@ -7,12 +7,22 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 import db from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST', 'DELETE']
+  }
+});
+
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -154,6 +164,7 @@ app.post('/api/board', authenticate, async (req, res) => {
     await dbRun(`UPDATE board_state SET columnsJSON=?, columnOrderJSON=?, bgImageUrl=?, appName=? WHERE userId=?`, 
       [JSON.stringify(columns), JSON.stringify(columnOrder), bgImageUrl || '', appName || 'FocusBoard', req.userId]
     );
+    io.emit('boardUpdate', req.userId); // Notify clients
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -174,6 +185,7 @@ app.post('/api/tasks', authenticate, async (req, res) => {
         [id, req.userId, title, description, priority, dueDate, columnId, position || 0, JSON.stringify(tags || []), JSON.stringify(subtasks || []), JSON.stringify(comments || []), JSON.stringify(attachments || []), timeSpent || 0]
       );
     }
+    io.emit('boardUpdate', req.userId); // Notify clients
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -183,6 +195,7 @@ app.post('/api/tasks', authenticate, async (req, res) => {
 app.delete('/api/tasks/:id', authenticate, async (req, res) => {
   try {
     await dbRun(`DELETE FROM tasks WHERE id = ? AND userId = ?`, [req.params.id, req.userId]);
+    io.emit('boardUpdate', req.userId); // Notify clients
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -230,27 +243,27 @@ app.post('/api/external/autocomplete', authenticate, async (req, res) => {
       ]});
     }
 
-    const aiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+    const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${user.openaiKey}`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${user.openaiKey}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [{
-          role: 'system',
-          content: 'You are an assistant that breaks down a task title into 3 to 5 actionable subtasks. Return ONLY a JSON array of strings, e.g. ["Task 1", "Task 2"].'
-        }, {
-          role: 'user',
-          content: `Task: ${title}\nDescription: ${description || ''}`
+        contents: [{
+          parts: [{
+            text: `You are an assistant that breaks down a task title into 3 to 5 actionable subtasks. Return ONLY a valid JSON array of strings, e.g. ["Task 1", "Task 2"]. No markdown formatting, just the raw JSON array. Task: ${title}\nDescription: ${description || ''}`
+          }]
         }]
       })
     });
     
-    if (!aiRes.ok) throw new Error('Error de OpenAI. Verifica tu API Key.');
+    if (!aiRes.ok) throw new Error('Error de Gemini. Verifica tu API Key.');
     const data = await aiRes.json();
-    const content = data.choices[0].message.content;
+    let content = data.candidates[0].content.parts[0].text;
+    
+    // Clean up potential markdown formatting from Gemini response
+    content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+    
     const subtaskArray = JSON.parse(content);
     
     const subtasks = subtaskArray.map(st => ({ id: uuidv4(), title: st, completed: false }));
@@ -281,6 +294,53 @@ app.get('/api/external/unsplash', authenticate, async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+// CHATBOT ENDPOINT
+app.post('/api/external/chat', authenticate, async (req, res) => {
+  const { message } = req.body;
+  try {
+    const user = await dbGet(`SELECT openaiKey FROM users WHERE id = ?`, [req.userId]);
+    if (!user || !user.openaiKey) {
+      return res.status(400).json({ error: 'Falta tu llave de Gemini en Ajustes.' });
+    }
+
+    // Extraer todo el contexto del tablero para mandarlo a la IA
+    const tasksRows = await dbAll(`SELECT title, columnId, priority, dueDate FROM tasks WHERE userId = ?`, [req.userId]);
+    const state = await dbGet(`SELECT columnsJSON FROM board_state WHERE userId = ?`, [req.userId]);
+    const columns = state ? JSON.parse(state.columnsJSON) : {};
+
+    const contextStr = tasksRows.map(t => {
+      const colName = columns[t.columnId] ? columns[t.columnId].title : 'Desconocida';
+      return `- Tarea: "${t.title}", Columna: ${colName}, Prioridad: ${t.priority}, Vence: ${t.dueDate || 'Sin fecha'}`;
+    }).join('\n');
+
+    const prompt = `
+Eres un asistente inteligente para la herramienta "FocusBoard" gestionando las tareas del usuario.
+Aquí está la lista actual de las tareas del usuario y en qué columna del tablero Kanban se encuentran:
+${contextStr}
+
+El usuario te dice: "${message}"
+
+Responde de forma concisa y amigable basándote en la información de sus tareas.
+`;
+
+    const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${user.openaiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }]
+      })
+    });
+    
+    if (!aiRes.ok) throw new Error('Error de Gemini Chat.');
+    const data = await aiRes.json();
+    let reply = data.candidates[0].content.parts[0].text;
+    
+    res.json({ reply });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+httpServer.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
