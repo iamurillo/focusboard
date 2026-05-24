@@ -508,6 +508,10 @@ ${contextStr}
 El usuario te dice: "${message}"
 
 Responde de forma concisa y amigable basándote en la información de sus tareas.
+Si el usuario te pide explícitamente crear, añadir o agendar una NUEVA tarea, responde de forma natural pero asegúrate de incluir EXACTAMENTE ESTE BLOQUE al final de tu respuesta (reemplazando los valores):
+[CREATE_TASK: {"title": "Título corto", "description": "Descripción opcional", "priority": "medium", "dueDate": ""}]
+(Los valores permitidos de priority son "low", "medium", "high". Usa el formato YYYY-MM-DD para dueDate si se menciona una fecha).
+Si no hay solicitud de crear una tarea, NO incluyas el bloque [CREATE_TASK: ...].
 `;
 
     let reply = '';
@@ -572,6 +576,46 @@ Responde de forma concisa y amigable basándote en la información de sus tareas
       reply = data.choices[0].message.content;
     }
     
+    // --- TASK CREATION PARSING LOGIC ---
+    const taskRegex = /\[CREATE_TASK:\s*(\{.*?\})\s*\]/s;
+    const match = reply.match(taskRegex);
+    
+    if (match) {
+      try {
+        const taskData = JSON.parse(match[1]);
+        const newTaskId = uuidv4();
+        
+        // Asignar a la primera columna disponible o 'todo'
+        let columnId = 'todo';
+        if (Object.keys(columns).length > 0) {
+          const colOrder = await dbGet(`SELECT columnOrderJSON FROM board_state WHERE userId = ?`, [req.userId]);
+          if (colOrder && colOrder.columnOrderJSON) {
+            const arr = JSON.parse(colOrder.columnOrderJSON);
+            if (arr.length > 0) columnId = arr[0];
+          }
+        }
+
+        // Insertar en BD
+        await dbRun(`INSERT INTO tasks (id, userId, title, description, priority, dueDate, columnId, tags, subtasks, comments, attachments, timeSpent) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, '[]', '[]', '[]', '[]', 0)`, 
+          [newTaskId, req.userId, taskData.title, taskData.description || '', taskData.priority || 'medium', taskData.dueDate || '', columnId]);
+        
+        // Actualizar el estado del tablero
+        if (columns[columnId]) {
+          columns[columnId].taskIds.push(newTaskId);
+          await dbRun(`UPDATE board_state SET columnsJSON = ? WHERE userId = ?`, [JSON.stringify(columns), req.userId]);
+        }
+
+        // Emitir actualizacion por websocket
+        io.emit('boardUpdate', req.userId);
+        
+        // Limpiar el mensaje de la IA para que el usuario no vea el JSON
+        reply = reply.replace(match[0], '').trim();
+      } catch (err) {
+        console.error("Error parseando comando de tarea:", err);
+      }
+    }
+
     res.json({ reply });
   } catch (err) {
     res.status(500).json({ error: err.message });
