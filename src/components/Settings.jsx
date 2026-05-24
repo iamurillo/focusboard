@@ -10,6 +10,8 @@ export default function Settings({ onBgChange }) {
   const [aiProvider, setAiProvider] = useState('gemini');
   const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
   const [ollamaModel, setOllamaModel] = useState('llama3');
+  const [openrouterKey, setOpenrouterKey] = useState('');
+  const [openrouterModel, setOpenrouterModel] = useState('meta-llama/llama-3-8b-instruct:free');
   const [bgQuery, setBgQuery] = useState('');
   const [appName, setAppName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,10 +25,12 @@ export default function Settings({ onBgChange }) {
         setApiKey(data.apiKey || '');
         if (data.hasOpenaiKey) setOpenaiKey('********');
         if (data.hasUnsplashKey) setUnsplashKey('********');
+        if (data.hasOpenrouterKey) setOpenrouterKey('********');
         if (data.openaiModel) setOpenaiModel(data.openaiModel);
         if (data.aiProvider) setAiProvider(data.aiProvider);
         if (data.ollamaUrl) setOllamaUrl(data.ollamaUrl);
         if (data.ollamaModel) setOllamaModel(data.ollamaModel);
+        if (data.openrouterModel) setOpenrouterModel(data.openrouterModel);
       });
     
     fetch(`${API_URL}/board`, { headers: { 'Authorization': `Bearer ${token}` } })
@@ -40,9 +44,10 @@ export default function Settings({ onBgChange }) {
     const token = localStorage.getItem('focusboard_token');
     try {
       // Si la llave es '********', significa que no ha cambiado y no debemos enviarla
-      const payload = { openaiModel, aiProvider, ollamaUrl, ollamaModel };
+      const payload = { openaiModel, aiProvider, ollamaUrl, ollamaModel, openrouterModel };
       if (openaiKey && openaiKey !== '********') payload.openaiKey = openaiKey;
       if (unsplashKey && unsplashKey !== '********') payload.unsplashKey = unsplashKey;
+      if (openrouterKey && openrouterKey !== '********') payload.openrouterKey = openrouterKey;
 
       await fetch(`${API_URL}/me`, {
         method: 'POST',
@@ -125,6 +130,7 @@ export default function Settings({ onBgChange }) {
             onChange={e => setAiProvider(e.target.value)}
           >
             <option value="gemini">Google Gemini (En la nube)</option>
+            <option value="openrouter">OpenRouter (Múltiples Modelos)</option>
             <option value="ollama">Ollama (Local / Privado)</option>
           </select>
         </div>
@@ -180,6 +186,33 @@ export default function Settings({ onBgChange }) {
                 value={ollamaModel}
                 onChange={e => setOllamaModel(e.target.value)}
               />
+            </div>
+          </>
+        )}
+
+        {aiProvider === 'openrouter' && (
+          <>
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <label className="form-label">OpenRouter API Key</label>
+              <input 
+                type="password" 
+                className="form-input" 
+                placeholder="sk-or-v1-..." 
+                value={openrouterKey}
+                onChange={e => setOpenrouterKey(e.target.value)}
+              />
+            </div>
+            
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <label className="form-label">Nombre del Modelo OpenRouter</label>
+              <input 
+                type="text" 
+                className="form-input" 
+                placeholder="meta-llama/llama-3-8b-instruct:free" 
+                value={openrouterModel}
+                onChange={e => setOpenrouterModel(e.target.value)}
+              />
+              <small className="text-muted">Por defecto usamos `meta-llama/llama-3-8b-instruct:free` que es 100% gratis.</small>
             </div>
           </>
         )}

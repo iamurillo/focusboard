@@ -26,7 +26,9 @@ db.serialize(() => {
     openaiModel TEXT DEFAULT 'gemini-1.5-flash',
     aiProvider TEXT DEFAULT 'gemini',
     ollamaUrl TEXT DEFAULT 'http://localhost:11434',
-    ollamaModel TEXT DEFAULT 'llama3'
+    ollamaModel TEXT DEFAULT 'llama3',
+    openrouterKey TEXT,
+    openrouterModel TEXT DEFAULT 'meta-llama/llama-3-8b-instruct:free'
   )`);
 
   // Add column if it doesn't exist (migration)
@@ -34,6 +36,8 @@ db.serialize(() => {
   db.run(`ALTER TABLE users ADD COLUMN aiProvider TEXT DEFAULT 'gemini'`, (err) => {});
   db.run(`ALTER TABLE users ADD COLUMN ollamaUrl TEXT DEFAULT 'http://localhost:11434'`, (err) => {});
   db.run(`ALTER TABLE users ADD COLUMN ollamaModel TEXT DEFAULT 'llama3'`, (err) => {});
+  db.run(`ALTER TABLE users ADD COLUMN openrouterKey TEXT`, (err) => {});
+  db.run(`ALTER TABLE users ADD COLUMN openrouterModel TEXT DEFAULT 'meta-llama/llama-3-8b-instruct:free'`, (err) => {});
 
   // Tasks table
   db.run(`CREATE TABLE IF NOT EXISTS tasks (

@@ -171,17 +171,19 @@ app.post('/api/login', async (req, res) => {
 
 app.get('/api/me', authenticate, async (req, res) => {
   try {
-    const user = await dbGet(`SELECT username, apiKey, openaiKey, unsplashKey, openaiModel, aiProvider, ollamaUrl, ollamaModel FROM users WHERE id = ?`, [req.userId]);
+    const user = await dbGet(`SELECT username, apiKey, openaiKey, unsplashKey, openaiModel, aiProvider, ollamaUrl, ollamaModel, openrouterKey, openrouterModel FROM users WHERE id = ?`, [req.userId]);
     if (user) {
       res.json({
         username: user.username,
         apiKey: user.apiKey,
         hasOpenaiKey: !!user.openaiKey,
         hasUnsplashKey: !!user.unsplashKey,
+        hasOpenrouterKey: !!user.openrouterKey,
         openaiModel: user.openaiModel || 'gemini-1.5-flash',
         aiProvider: user.aiProvider || 'gemini',
         ollamaUrl: user.ollamaUrl || 'http://localhost:11434',
-        ollamaModel: user.ollamaModel || 'llama3'
+        ollamaModel: user.ollamaModel || 'llama3',
+        openrouterModel: user.openrouterModel || 'meta-llama/llama-3-8b-instruct:free'
       });
     } else {
       res.json({});
@@ -192,20 +194,23 @@ app.get('/api/me', authenticate, async (req, res) => {
 });
 
 app.post('/api/me', authenticate, async (req, res) => {
-  const { openaiKey, unsplashKey, openaiModel, aiProvider, ollamaUrl, ollamaModel } = req.body;
+  const { openaiKey, unsplashKey, openaiModel, aiProvider, ollamaUrl, ollamaModel, openrouterKey, openrouterModel } = req.body;
   try {
-    const user = await dbGet(`SELECT openaiKey, unsplashKey, openaiModel, aiProvider, ollamaUrl, ollamaModel FROM users WHERE id = ?`, [req.userId]);
+    const user = await dbGet(`SELECT openaiKey, unsplashKey, openaiModel, aiProvider, ollamaUrl, ollamaModel, openrouterKey, openrouterModel FROM users WHERE id = ?`, [req.userId]);
     
     // Solo actualizar si nos enviaron una nueva llave
     const encryptedOpenai = openaiKey !== undefined ? encrypt(openaiKey) : user.openaiKey;
     const encryptedUnsplash = unsplashKey !== undefined ? encrypt(unsplashKey) : user.unsplashKey;
+    const encryptedOpenrouter = openrouterKey !== undefined ? encrypt(openrouterKey) : user.openrouterKey;
+    
     const newModel = openaiModel !== undefined ? openaiModel : (user.openaiModel || 'gemini-1.5-flash');
     const newProvider = aiProvider !== undefined ? aiProvider : (user.aiProvider || 'gemini');
     const newOllamaUrl = ollamaUrl !== undefined ? ollamaUrl : (user.ollamaUrl || 'http://localhost:11434');
     const newOllamaModel = ollamaModel !== undefined ? ollamaModel : (user.ollamaModel || 'llama3');
+    const newOpenrouterModel = openrouterModel !== undefined ? openrouterModel : (user.openrouterModel || 'meta-llama/llama-3-8b-instruct:free');
     
-    await dbRun(`UPDATE users SET openaiKey = ?, unsplashKey = ?, openaiModel = ?, aiProvider = ?, ollamaUrl = ?, ollamaModel = ? WHERE id = ?`, 
-      [encryptedOpenai, encryptedUnsplash, newModel, newProvider, newOllamaUrl, newOllamaModel, req.userId]);
+    await dbRun(`UPDATE users SET openaiKey = ?, unsplashKey = ?, openaiModel = ?, aiProvider = ?, ollamaUrl = ?, ollamaModel = ?, openrouterKey = ?, openrouterModel = ? WHERE id = ?`, 
+      [encryptedOpenai, encryptedUnsplash, newModel, newProvider, newOllamaUrl, newOllamaModel, encryptedOpenrouter, newOpenrouterModel, req.userId]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -318,7 +323,7 @@ app.post('/api/upload', authenticate, upload.single('file'), async (req, res) =>
 app.post('/api/external/autocomplete', authenticate, async (req, res) => {
   const { title, description } = req.body;
   try {
-    const user = await dbGet(`SELECT openaiKey, openaiModel, aiProvider, ollamaUrl, ollamaModel FROM users WHERE id = ?`, [req.userId]);
+    const user = await dbGet(`SELECT openaiKey, openaiModel, aiProvider, ollamaUrl, ollamaModel, openrouterKey, openrouterModel FROM users WHERE id = ?`, [req.userId]);
     const provider = user?.aiProvider || 'gemini';
     const promptText = `You are an assistant that breaks down a task title into 3 to 5 actionable subtasks. Return ONLY a valid JSON array of strings, e.g. ["Task 1", "Task 2"]. No markdown formatting, just the raw JSON array. Task: ${title}\nDescription: ${description || ''}`;
 
@@ -370,9 +375,38 @@ app.post('/api/external/autocomplete', authenticate, async (req, res) => {
       if (!aiRes.ok) throw new Error(`Error conectando con Ollama en ${ollamaUrl}`);
       const data = await aiRes.json();
       content = data.response;
+    } else if (provider === 'openrouter') {
+      if (!user || !user.openrouterKey) {
+        return res.json({ subtasks: [
+          { id: uuidv4(), title: `Investigar sobre ${title}`, completed: false },
+          { id: uuidv4(), title: 'Crear borrador', completed: false }
+        ]});
+      }
+
+      const decryptedKey = decrypt(user.openrouterKey);
+      const openrouterModel = user.openrouterModel || 'meta-llama/llama-3-8b-instruct:free';
+      const aiRes = await fetch(`https://openrouter.ai/api/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${decryptedKey}`
+        },
+        body: JSON.stringify({
+          model: openrouterModel,
+          messages: [{ role: 'user', content: promptText }]
+        })
+      });
+
+      if (!aiRes.ok) {
+        const errData = await aiRes.json();
+        console.error("OpenRouter API Error:", errData);
+        throw new Error(`Error de OpenRouter: ${errData.error?.message || 'Error desconocido'}`);
+      }
+      const data = await aiRes.json();
+      content = data.choices[0].message.content;
     }
 
-    // Clean up potential markdown formatting from Gemini/Ollama response
+    // Clean up potential markdown formatting from AI response
     content = content.replace(/```json/g, '').replace(/```/g, '').trim();
     
     const subtaskArray = JSON.parse(content);
@@ -410,11 +444,14 @@ app.get('/api/external/unsplash', authenticate, async (req, res) => {
 app.post('/api/external/chat', authenticate, async (req, res) => {
   const { message } = req.body;
   try {
-    const user = await dbGet(`SELECT openaiKey, openaiModel, aiProvider, ollamaUrl, ollamaModel FROM users WHERE id = ?`, [req.userId]);
+    const user = await dbGet(`SELECT openaiKey, openaiModel, aiProvider, ollamaUrl, ollamaModel, openrouterKey, openrouterModel FROM users WHERE id = ?`, [req.userId]);
     const provider = user?.aiProvider || 'gemini';
     
     if (provider === 'gemini' && (!user || !user.openaiKey)) {
       return res.status(400).json({ error: 'Falta tu llave de Gemini en Ajustes.' });
+    }
+    if (provider === 'openrouter' && (!user || !user.openrouterKey)) {
+      return res.status(400).json({ error: 'Falta tu llave de OpenRouter en Ajustes.' });
     }
 
     // Extraer todo el contexto del tablero para mandarlo a la IA
@@ -473,6 +510,28 @@ Responde de forma concisa y amigable basándote en la información de sus tareas
       if (!aiRes.ok) throw new Error(`Error conectando con Ollama en ${ollamaUrl}`);
       const data = await aiRes.json();
       reply = data.response;
+    } else if (provider === 'openrouter') {
+      const decryptedKey = decrypt(user.openrouterKey);
+      const openrouterModel = user.openrouterModel || 'meta-llama/llama-3-8b-instruct:free';
+      const aiRes = await fetch(`https://openrouter.ai/api/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${decryptedKey}`
+        },
+        body: JSON.stringify({
+          model: openrouterModel,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+
+      if (!aiRes.ok) {
+        const errData = await aiRes.json();
+        console.error("OpenRouter API Error:", errData);
+        throw new Error(`Error de OpenRouter: ${errData.error?.message || 'Error desconocido'}`);
+      }
+      const data = await aiRes.json();
+      reply = data.choices[0].message.content;
     }
     
     res.json({ reply });
