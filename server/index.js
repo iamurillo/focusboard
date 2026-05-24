@@ -383,13 +383,15 @@ app.post('/api/external/autocomplete', authenticate, async (req, res) => {
         ]});
       }
 
-      const decryptedKey = decrypt(user.openrouterKey);
+      const decryptedKey = decrypt(user.openrouterKey).trim();
       const openrouterModel = user.openrouterModel || 'meta-llama/llama-3-8b-instruct:free';
       const aiRes = await fetch(`https://openrouter.ai/api/v1/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${decryptedKey}`
+          'Authorization': `Bearer ${decryptedKey}`,
+          'HTTP-Referer': 'http://localhost:3001',
+          'X-Title': 'FocusBoard'
         },
         body: JSON.stringify({
           model: openrouterModel,
@@ -511,13 +513,15 @@ Responde de forma concisa y amigable basándote en la información de sus tareas
       const data = await aiRes.json();
       reply = data.response;
     } else if (provider === 'openrouter') {
-      const decryptedKey = decrypt(user.openrouterKey);
+      const decryptedKey = decrypt(user.openrouterKey).trim();
       const openrouterModel = user.openrouterModel || 'meta-llama/llama-3-8b-instruct:free';
       const aiRes = await fetch(`https://openrouter.ai/api/v1/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${decryptedKey}`
+          'Authorization': `Bearer ${decryptedKey}`,
+          'HTTP-Referer': 'http://localhost:3001',
+          'X-Title': 'FocusBoard'
         },
         body: JSON.stringify({
           model: openrouterModel,
