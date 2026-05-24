@@ -6,6 +6,7 @@ export default function Settings({ onBgChange }) {
   const [apiKey, setApiKey] = useState('');
   const [openaiKey, setOpenaiKey] = useState('');
   const [unsplashKey, setUnsplashKey] = useState('');
+  const [openaiModel, setOpenaiModel] = useState('gemini-2.5-flash');
   const [bgQuery, setBgQuery] = useState('');
   const [appName, setAppName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,6 +20,7 @@ export default function Settings({ onBgChange }) {
         setApiKey(data.apiKey || '');
         if (data.hasOpenaiKey) setOpenaiKey('********');
         if (data.hasUnsplashKey) setUnsplashKey('********');
+        if (data.openaiModel) setOpenaiModel(data.openaiModel);
       });
     
     fetch(`${API_URL}/board`, { headers: { 'Authorization': `Bearer ${token}` } })
@@ -32,7 +34,7 @@ export default function Settings({ onBgChange }) {
     const token = localStorage.getItem('focusboard_token');
     try {
       // Si la llave es '********', significa que no ha cambiado y no debemos enviarla
-      const payload = {};
+      const payload = { openaiModel };
       if (openaiKey && openaiKey !== '********') payload.openaiKey = openaiKey;
       if (unsplashKey && unsplashKey !== '********') payload.unsplashKey = unsplashKey;
 
@@ -119,6 +121,20 @@ export default function Settings({ onBgChange }) {
             onChange={e => setOpenaiKey(e.target.value)}
           />
           <small className="text-muted">Necesaria para usar la varita mágica y generar subtareas con Google Gemini.</small>
+        </div>
+
+        <div className="form-group" style={{ marginTop: '1rem' }}>
+          <label className="form-label">Modelo de Inteligencia Artificial</label>
+          <select 
+            className="form-input" 
+            value={openaiModel} 
+            onChange={e => setOpenaiModel(e.target.value)}
+          >
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Rápido y económico)</option>
+            <option value="gemini-1.5-pro">Gemini 1.5 Pro (Más inteligente y detallado)</option>
+            <option value="gemini-2.5-pro">Gemini 2.5 Pro (Avanzado)</option>
+          </select>
+          <small className="text-muted">Elige el "cerebro" que FocusBoard usará para generar tareas y chatear.</small>
         </div>
 
         <div className="form-group" style={{ marginTop: '1rem' }}>

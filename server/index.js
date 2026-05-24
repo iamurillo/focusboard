@@ -171,13 +171,14 @@ app.post('/api/login', async (req, res) => {
 
 app.get('/api/me', authenticate, async (req, res) => {
   try {
-    const user = await dbGet(`SELECT username, apiKey, openaiKey, unsplashKey FROM users WHERE id = ?`, [req.userId]);
+    const user = await dbGet(`SELECT username, apiKey, openaiKey, unsplashKey, openaiModel FROM users WHERE id = ?`, [req.userId]);
     if (user) {
       res.json({
         username: user.username,
         apiKey: user.apiKey,
         hasOpenaiKey: !!user.openaiKey,
-        hasUnsplashKey: !!user.unsplashKey
+        hasUnsplashKey: !!user.unsplashKey,
+        openaiModel: user.openaiModel || 'gemini-2.5-flash'
       });
     } else {
       res.json({});
@@ -188,15 +189,16 @@ app.get('/api/me', authenticate, async (req, res) => {
 });
 
 app.post('/api/me', authenticate, async (req, res) => {
-  const { openaiKey, unsplashKey } = req.body;
+  const { openaiKey, unsplashKey, openaiModel } = req.body;
   try {
-    const user = await dbGet(`SELECT openaiKey, unsplashKey FROM users WHERE id = ?`, [req.userId]);
+    const user = await dbGet(`SELECT openaiKey, unsplashKey, openaiModel FROM users WHERE id = ?`, [req.userId]);
     
     // Solo actualizar si nos enviaron una nueva llave
     const encryptedOpenai = openaiKey !== undefined ? encrypt(openaiKey) : user.openaiKey;
     const encryptedUnsplash = unsplashKey !== undefined ? encrypt(unsplashKey) : user.unsplashKey;
+    const newModel = openaiModel !== undefined ? openaiModel : (user.openaiModel || 'gemini-2.5-flash');
     
-    await dbRun(`UPDATE users SET openaiKey = ?, unsplashKey = ? WHERE id = ?`, [encryptedOpenai, encryptedUnsplash, req.userId]);
+    await dbRun(`UPDATE users SET openaiKey = ?, unsplashKey = ?, openaiModel = ? WHERE id = ?`, [encryptedOpenai, encryptedUnsplash, newModel, req.userId]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -309,7 +311,7 @@ app.post('/api/upload', authenticate, upload.single('file'), async (req, res) =>
 app.post('/api/external/autocomplete', authenticate, async (req, res) => {
   const { title, description } = req.body;
   try {
-    const user = await dbGet(`SELECT openaiKey FROM users WHERE id = ?`, [req.userId]);
+    const user = await dbGet(`SELECT openaiKey, openaiModel FROM users WHERE id = ?`, [req.userId]);
     if (!user || !user.openaiKey) {
       return res.json({ subtasks: [
         { id: uuidv4(), title: `Investigar sobre ${title}`, completed: false },
@@ -318,7 +320,8 @@ app.post('/api/external/autocomplete', authenticate, async (req, res) => {
     }
 
     const decryptedKey = decrypt(user.openaiKey);
-    const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${decryptedKey}`, {
+    const model = user.openaiModel || 'gemini-2.5-flash';
+    const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${decryptedKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -374,7 +377,7 @@ app.get('/api/external/unsplash', authenticate, async (req, res) => {
 app.post('/api/external/chat', authenticate, async (req, res) => {
   const { message } = req.body;
   try {
-    const user = await dbGet(`SELECT openaiKey FROM users WHERE id = ?`, [req.userId]);
+    const user = await dbGet(`SELECT openaiKey, openaiModel FROM users WHERE id = ?`, [req.userId]);
     if (!user || !user.openaiKey) {
       return res.status(400).json({ error: 'Falta tu llave de Gemini en Ajustes.' });
     }
@@ -400,7 +403,8 @@ Responde de forma concisa y amigable basándote en la información de sus tareas
 `;
 
     const decryptedKey = decrypt(user.openaiKey);
-    const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${decryptedKey}`, {
+    const model = user.openaiModel || 'gemini-2.5-flash';
+    const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${decryptedKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
