@@ -6,7 +6,7 @@ export default function Settings({ onBgChange }) {
   const [apiKey, setApiKey] = useState('');
   const [openaiKey, setOpenaiKey] = useState('');
   const [unsplashKey, setUnsplashKey] = useState('');
-  const [openaiModel, setOpenaiModel] = useState('gemini-2.5-flash');
+  const [openaiModel, setOpenaiModel] = useState('gemini-1.5-flash');
   const [bgQuery, setBgQuery] = useState('');
   const [appName, setAppName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -130,9 +130,9 @@ export default function Settings({ onBgChange }) {
             value={openaiModel} 
             onChange={e => setOpenaiModel(e.target.value)}
           >
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Rápido y económico)</option>
-            <option value="gemini-1.5-pro">Gemini 1.5 Pro (Más inteligente y detallado)</option>
-            <option value="gemini-2.5-pro">Gemini 2.5 Pro (Avanzado)</option>
+            <option value="gemini-1.5-flash">Gemini 1.5 Flash (Rápido y económico)</option>
+            <option value="gemini-2.0-flash">Gemini 2.0 Flash (Más reciente y balanceado)</option>
+            <option value="gemini-1.5-pro">Gemini 1.5 Pro (Más inteligente y avanzado)</option>
           </select>
           <small className="text-muted">Elige el "cerebro" que FocusBoard usará para generar tareas y chatear.</small>
         </div>

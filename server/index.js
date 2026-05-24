@@ -178,7 +178,7 @@ app.get('/api/me', authenticate, async (req, res) => {
         apiKey: user.apiKey,
         hasOpenaiKey: !!user.openaiKey,
         hasUnsplashKey: !!user.unsplashKey,
-        openaiModel: user.openaiModel || 'gemini-2.5-flash'
+        openaiModel: user.openaiModel || 'gemini-1.5-flash'
       });
     } else {
       res.json({});
@@ -196,7 +196,7 @@ app.post('/api/me', authenticate, async (req, res) => {
     // Solo actualizar si nos enviaron una nueva llave
     const encryptedOpenai = openaiKey !== undefined ? encrypt(openaiKey) : user.openaiKey;
     const encryptedUnsplash = unsplashKey !== undefined ? encrypt(unsplashKey) : user.unsplashKey;
-    const newModel = openaiModel !== undefined ? openaiModel : (user.openaiModel || 'gemini-2.5-flash');
+    const newModel = openaiModel !== undefined ? openaiModel : (user.openaiModel || 'gemini-1.5-flash');
     
     await dbRun(`UPDATE users SET openaiKey = ?, unsplashKey = ?, openaiModel = ? WHERE id = ?`, [encryptedOpenai, encryptedUnsplash, newModel, req.userId]);
     res.json({ success: true });
@@ -320,7 +320,7 @@ app.post('/api/external/autocomplete', authenticate, async (req, res) => {
     }
 
     const decryptedKey = decrypt(user.openaiKey);
-    const model = user.openaiModel || 'gemini-2.5-flash';
+    const model = user.openaiModel || 'gemini-1.5-flash';
     const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${decryptedKey}`, {
       method: 'POST',
       headers: {
@@ -335,7 +335,11 @@ app.post('/api/external/autocomplete', authenticate, async (req, res) => {
       })
     });
     
-    if (!aiRes.ok) throw new Error('Error de Gemini. Verifica tu API Key.');
+    if (!aiRes.ok) {
+      const errData = await aiRes.json();
+      console.error("Gemini API Error:", errData);
+      throw new Error(`Error de Gemini: ${errData.error?.message || 'Error desconocido'}`);
+    }
     const data = await aiRes.json();
     let content = data.candidates[0].content.parts[0].text;
     
@@ -403,7 +407,7 @@ Responde de forma concisa y amigable basándote en la información de sus tareas
 `;
 
     const decryptedKey = decrypt(user.openaiKey);
-    const model = user.openaiModel || 'gemini-2.5-flash';
+    const model = user.openaiModel || 'gemini-1.5-flash';
     const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${decryptedKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -412,7 +416,11 @@ Responde de forma concisa y amigable basándote en la información de sus tareas
       })
     });
     
-    if (!aiRes.ok) throw new Error('Error de Gemini Chat.');
+    if (!aiRes.ok) {
+      const errData = await aiRes.json();
+      console.error("Gemini API Error:", errData);
+      throw new Error(`Error de Gemini: ${errData.error?.message || 'Error desconocido'}`);
+    }
     const data = await aiRes.json();
     let reply = data.candidates[0].content.parts[0].text;
     

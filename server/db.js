@@ -23,11 +23,11 @@ db.serialize(() => {
     apiKey TEXT UNIQUE,
     openaiKey TEXT,
     unsplashKey TEXT,
-    openaiModel TEXT DEFAULT 'gemini-2.5-flash'
+    openaiModel TEXT DEFAULT 'gemini-1.5-flash'
   )`);
 
   // Add column if it doesn't exist (migration)
-  db.run(`ALTER TABLE users ADD COLUMN openaiModel TEXT DEFAULT 'gemini-2.5-flash'`, (err) => {
+  db.run(`ALTER TABLE users ADD COLUMN openaiModel TEXT DEFAULT 'gemini-1.5-flash'`, (err) => {
     // We ignore the error if the column already exists
   });
 
