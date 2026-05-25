@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, X, Send, Bot } from 'lucide-react';
+import { MessageSquare, X, Send, Bot, Mic, MicOff } from 'lucide-react';
 
 export default function Chatbot({ token }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -8,7 +8,51 @@ export default function Chatbot({ token }) {
   }]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const messagesEndRef = useRef(null);
+  const recognitionRef = useRef(null);
+
+  useEffect(() => {
+    // Inicializar Web Speech API
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'es-ES'; // Idioma por defecto
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setInput(prev => prev ? prev + ' ' + transcript : transcript);
+        setIsListening(false);
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error", event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+    }
+  }, []);
+
+  const toggleListening = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    } else {
+      if (recognitionRef.current) {
+        recognitionRef.current.start();
+        setIsListening(true);
+      } else {
+        alert("Tu navegador no soporta comandos de voz.");
+      }
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -134,9 +178,23 @@ export default function Chatbot({ token }) {
             padding: '1rem', borderTop: '1px solid var(--border-color)',
             display: 'flex', gap: '0.5rem', background: 'rgba(0,0,0,0.2)'
           }}>
+            <button
+              type="button"
+              onClick={toggleListening}
+              style={{
+                background: isListening ? 'var(--accent-danger)' : 'transparent',
+                color: isListening ? 'white' : 'var(--text-muted)',
+                border: 'none', borderRadius: '50%',
+                width: '36px', height: '36px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', transition: 'all 0.2s'
+              }}
+            >
+              {isListening ? <Mic size={18} className="pulse-animation" /> : <MicOff size={18} />}
+            </button>
             <input 
               type="text" 
-              placeholder="Pregúntale a Gemini..."
+              placeholder="Pregúntale a FocusBot..."
               value={input}
               onChange={e => setInput(e.target.value)}
               disabled={isLoading}
